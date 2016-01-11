@@ -16,3 +16,5 @@ https://tools.ietf.org/html/rfc7405
 http://eprints.nottingham.ac.uk/237/1/monparsing.pdf
 
 http://theorangeduck.com/page/you-could-have-invented-parser-combinators 
+
+http://dickgrune.com/Books/PTAPG_2nd_Edition/

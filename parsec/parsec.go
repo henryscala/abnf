@@ -1,152 +1,66 @@
-//refer to http://eprints.nottingham.ac.uk/237/1/monparsing.pdf
+//refer to http://theorangeduck.com/page/you-could-have-invented-parser-combinators
 package parsec
 
-type Any interface{}
+import (
+	"strings"
+)
 
-type Pair struct {
-	First, Second Any
-}
+var EmptyStringSlice []string = []string{}
+var EmptyAnySlice []interface{} = []interface{}{}
 
-type Cell struct {
-	Head Any
-	Tail string
-}
+type Parser func(input string) (result []string, remaining string)
 
-type Parser func(input string) []Cell
+type AppliedParser func(input string) (result []interface{}, remaining string)
 
-//succeed without consuming the input str
-func Result(a Any) func(string) []Cell {
-	return func(input string) []Cell {
-		return []Cell{Cell{Head: a, Tail: input}}
-	}
-}
+type Apply func(inbound string) interface{}
 
-//always fail regardless the input str
-func Zero(input string) []Cell {
-	return []Cell{}
-}
+func Literal(s string) Parser {
+	return func(input string) (result []string, remaining string) {
 
-//consumes the first char
-func Item(input string) []Cell {
-	if len(input) == 0 {
-		return []Cell{}
-	}
-	return []Cell{Cell{Head: input[0], Tail: input[1:]}}
-}
-
-//apply parser one after another
-
-func Seq(pa, pb Parser) Parser {
-	f := func(a Any) Parser {
-		return func(input string) []Cell {
-			var list []Cell
-			list = pb(input)
-			if len(list) == 0 {
-				return list
-			}
-			var cell Cell = list[0]
-
-			return []Cell{Cell{Head: Pair{First: a, Second: cell.Head}, Tail: cell.Tail}}
+		if !strings.HasPrefix(input, s) {
+			return EmptyStringSlice, input
 		}
+		result = append(result, s)
+		remaining = input[len(s):]
+		return
 	}
-	return Bind(pa, f)
-
 }
 
-//Parser a -> (a->Parser b) -> Parser b
-func Bind(pa Parser, f func(a Any) Parser) Parser {
-	return func(input string) []Cell {
-		var list []Cell
-		list = pa(input)
-		if len(list) == 0 {
-			return list
+func Alternative(p1, p2 Parser) Parser {
+	return func(input string) (result []string, remaining string) {
+		result, remaining = p1(input)
+		if len(result) != 0 {
+			return
 		}
-		var pair Cell
-		pair = list[0]
-
-		pb := f(pair.Head)
-
-		var list2 []Cell
-		list2 = pb(pair.Tail)
-		return list2
-
+		result, remaining = p2(input)
+		return
 	}
-
 }
 
-//Satisfy a byte or char
-func Sat(predicate func(byte) bool) Parser {
-	return Bind(Item, func(b Any) Parser {
-		if predicate(b.(byte)) {
-			return Result(b)
-		} else {
-			return Zero
+func Concat(p1, p2 Parser) Parser {
+	return func(input string) (result []string, remaining string) {
+		result, remaining = p1(input)
+		if len(result) == 0 { //failed
+			return EmptyStringSlice, input
 		}
-	})
-}
-
-//whether it is a specific char
-func Char(c byte) Parser {
-	return Sat(func(achar byte) bool {
-		return c == achar
-	})
-}
-
-//whether it is digit
-func Digit() Parser {
-	return Sat(func(achar byte) bool {
-		l := '0'
-		u := '9'
-		return rune(achar) >= l && rune(achar) <= u
-	})
-}
-
-//whether it is a lower char
-func Lower() Parser {
-	return Sat(
-		func(achar byte) bool {
-			l := 'a'
-			u := 'z'
-			return rune(achar) >= l && rune(achar) <= u
-		})
-}
-
-//whether it is a lower char
-func Upper() Parser {
-	return Sat(
-		func(achar byte) bool {
-			l := 'A'
-			u := 'Z'
-			return rune(achar) >= l && rune(achar) <= u
-		})
-}
-
-func Plus(p1, p2 Parser) Parser {
-	return func(input string) []Cell {
-		list1 := p1(input)
-		list2 := p2(input)
-
-		if len(list1) == 0 {
-			if len(list2) == 0 {
-				return []Cell{}
-			} else {
-				return list2
-			}
-		} else {
-			if len(list2) == 0 {
-				return list1
-			} else {
-				return append(list1, list2...)
-			}
+		result2, remaining2 := p2(remaining)
+		if len(result2) == 0 {
+			return EmptyStringSlice, input
 		}
 
+		result[0] += result2[0]
+		return result, remaining2
 	}
 }
 
-func Letter() Parser {
-	return Plus(Lower(), Upper())
-}
-
-func AlphaNum() Parser {
-	return Plus(Letter(), Digit())
+func Map(f Apply, p Parser) AppliedParser {
+	return func(input string) (result []interface{}, remaining string) {
+		var result1 []string
+		result1, remaining = p(input)
+		if len(result1) == 0 {
+			return EmptyAnySlice, input
+		}
+		result = append(result, f(result1[0]))
+		return result, remaining
+	}
 }
